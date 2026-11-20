@@ -2,6 +2,8 @@
 
 RepoPilot runs 15 evidence-based repository health checks from the command line. It scans local directories and public GitHub repositories and reports both a health score and evidence coverage.
 
+[Project website](https://wenjialei15.github.io/repopilot/) · [GitHub Releases](https://github.com/wenjialei15/repopilot/releases)
+
 ## Run from source
 
 With uv and Python 3.11 or newer:

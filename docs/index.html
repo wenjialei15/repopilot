@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="RepoPilot 是一个开源命令行工具，帮助维护者扫描仓库、安排修复和检查发版准备情况。">
+  <meta name="color-scheme" content="dark">
+  <title>RepoPilot · GitHub 仓库健康检查</title>
+  <link rel="stylesheet" href="./site.css">
+  <script src="./site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header class="header">
+    <nav class="nav wrap" aria-label="站点导航">
+      <a class="brand" href="./"><span class="mark" aria-hidden="true">&gt;_</span> RepoPilot</a>
+      <div class="nav-links">
+        <a href="#workflow">工作流</a>
+        <a href="#install">安装</a>
+        <a href="https://github.com/wenjialei15/repopilot">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="headline">
+      <div class="intro">
+        <p class="eyebrow">RepoPilot / v0.1.0</p>
+        <h1 id="headline">用证据检查仓库<br><em>安排下一步修复</em></h1>
+        <p class="lead">扫描本地目录或公开 GitHub 仓库。查看可复核的检查结果，生成维护计划，并确认哪些发版条件已有证据。</p>
+        <div class="actions">
+          <a class="button primary" href="#install">安装 RepoPilot</a>
+          <a class="button" href="https://github.com/wenjialei15/repopilot/releases/tag/v0.1.0">下载 v0.1.0</a>
+        </div>
+      </div>
+      <figure class="terminal">
+        <div class="terminal-bar"><span>终端示例</span><span>本地扫描</span></div>
+        <div class="terminal-body">
+          <p class="prompt"><span>$</span> repopilot scan . --format terminal</p>
+          <dl class="trace">
+            <div><dt>DOC001</dt><dd class="pass">pass</dd><dd>README 已找到</dd></div>
+            <div><dt>DOC002</dt><dd class="pass">pass</dd><dd>许可证已找到</dd></div>
+            <div><dt>CI003</dt><dd class="unknown">unknown</dd><dd>本地无法验证 CI 运行结果</dd></div>
+          </dl>
+        </div>
+        <figcaption>节选示意。报告同时显示健康分数与证据覆盖率。</figcaption>
+      </figure>
+    </section>
+
+    <section class="workflow wrap" id="workflow" aria-labelledby="workflow-title">
+      <div class="section-heading">
+        <p class="eyebrow">命令行工作流</p>
+        <h2 id="workflow-title">从扫描到发版检查</h2>
+      </div>
+      <div class="commands">
+        <article><h3><code>scan</code></h3><p>运行 15 条可配置检查，获取 JSON、Markdown 或终端报告。</p></article>
+        <article><h3><code>plan</code></h3><p>把失败项整理成维护任务，给出优先级、依据和验收条件。</p></article>
+        <article><h3><code>diff</code></h3><p>比较两份扫描报告，区分新增、已修复和待复核的问题。</p></article>
+        <article><h3><code>release-check</code></h3><p>核对文档、测试配置和可观测的 CI 结果，列出阻断项和证据缺口。</p></article>
+      </div>
+    </section>
+
+    <section class="install wrap" id="install" aria-labelledby="install-title">
+      <div>
+        <p class="eyebrow">快速开始</p>
+        <h2 id="install-title">下载并扫描</h2>
+        <p>需要 Python 3.11 或更新版本。下载 wheel 后，在文件所在目录执行以下命令。</p>
+        <div class="download-links">
+          <a href="https://github.com/wenjialei15/repopilot/releases/download/v0.1.0/repopilot_health-0.1.0-py3-none-any.whl">下载 wheel</a>
+          <a href="https://github.com/wenjialei15/repopilot/releases/download/v0.1.0/repopilot_health-0.1.0.tar.gz">源码包</a>
+          <a href="https://github.com/wenjialei15/repopilot/releases/download/v0.1.0/repopilot-0.1.0-SHA256SUMS.txt">SHA-256 校验和</a>
+        </div>
+      </div>
+      <div class="snippet">
+        <div class="terminal-bar"><span>Shell</span><button type="button" id="copy" aria-controls="install-code" hidden>复制命令</button></div>
+        <pre id="install-code" tabindex="0"><code>python -m pip install ./repopilot_health-0.1.0-py3-none-any.whl
+repopilot --version
+repopilot scan . --format terminal</code></pre>
+        <p class="copy-status" id="copy-status" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer wrap">
+    <span>RepoPilot · Apache-2.0</span>
+    <a href="https://github.com/wenjialei15/repopilot#readme">完整使用说明</a>
+    <a href="https://github.com/wenjialei15/repopilot/issues">反馈问题</a>
+  </footer>
+</body>
+</html>

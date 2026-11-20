@@ -1,6 +1,6 @@
 # RepoPilot v0.1.0 release readiness
 
-The candidate is prepared on the local `release/0.1.0` branch. Publication is pending.
+This report records the initial preparation checks for `release/0.1.0`. See [GitHub Releases](https://github.com/wenjialei15/repopilot/releases) for publication status.
 
 | Check | Result |
 | --- | --- |
