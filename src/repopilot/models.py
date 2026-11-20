@@ -18,6 +18,7 @@ class Finding(BaseModel):
     message: str
     recommendation: str
     evidence: list[Evidence] = Field(default_factory=list)
+    resource: str = Field(default="repository", min_length=1)
 
 
 class Score(BaseModel):
@@ -40,3 +41,36 @@ class PlanTask(BaseModel):
     title: str
     severity: Severity
     acceptance_criteria: list[str]
+    resource: str = "repository"
+    effort: Literal["small", "medium", "unknown"] = "unknown"
+    evidence: list[Evidence] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list)
+
+
+class MaintenancePlan(BaseModel):
+    schema_version: Literal["1.0"] = "1.0"
+    repository: str
+    tasks: list[PlanTask]
+
+
+class FindingChange(BaseModel):
+    finding: Finding
+    before: Status | None
+    after: Status | None
+
+
+class ScanDiff(BaseModel):
+    schema_version: Literal["1.0"] = "1.0"
+    baseline_repository: str
+    current_repository: str
+    added: list[FindingChange]
+    resolved: list[FindingChange]
+    persistent: list[FindingChange]
+    unverified: list[FindingChange]
+
+
+class ReleaseReport(BaseModel):
+    schema_version: Literal["1.0"] = "1.0"
+    repository: str
+    readiness: Literal["ready", "blocked", "incomplete"]
+    checks: list[Finding]

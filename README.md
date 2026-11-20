@@ -24,7 +24,7 @@ A plain directory is scanned normally. For a local target, `is_git_repository` i
 
 Remote scans read the head commit of the public repository's default branch. Set `GITHUB_TOKEN` for authenticated requests. Repository contents come from Git trees and blobs. Workflow run results apply to the scanned commit and are limited to the latest observed run per workflow. If GitHub's retry delay exceeds ten seconds or the API advises a longer wait, RepoPilot leaves affected evidence unavailable. See [GitHub REST API rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
 
-A successful scan exits with code 0 even when a finding fails. An invalid scan target exits with code 2. JSON goes to stdout and errors go to stderr.
+A successful scan exits with code 0 even when a finding fails. Output goes to stdout unless you pass `--output`. Errors go to stderr.
 
 ## Rules and scoring
 
@@ -65,6 +65,29 @@ rules:
 ```
 
 All rules are enabled by default. Unknown rule IDs and invalid configuration values produce an error.
+
+## Plan, compare, and check a release
+
+```sh
+uv run --no-sync repopilot scan . --output baseline.json
+uv run --no-sync repopilot plan baseline.json --output PLAN.md
+# Apply the chosen fixes, then scan the same target with the same rule settings.
+uv run --no-sync repopilot scan . --output current.json
+uv run --no-sync repopilot diff baseline.json current.json --output DIFF.md
+uv run --no-sync repopilot release-check .
+```
+
+- `plan` turns failed checks into ordered tasks with supporting evidence, rough effort estimates, prerequisites where applicable, and acceptance criteria.
+- `diff` matches findings by rule ID and resource. Reports from earlier versions default to a repository-wide resource. A failure is resolved when its current status is `pass`. A skipped, unknown, or absent check leaves the earlier failure unverified.
+- `release-check` checks README, license, workflow and test configuration, observed CI results, changelog, and release procedure. A failure blocks readiness. Missing evidence leaves readiness incomplete when the other checks pass. A local scan leaves CI run evidence unknown when workflows are present. Run `release-check github:owner/repo` to evaluate observed GitHub Actions runs on the public default branch.
+
+These three commands default to Markdown and accept `--format json` for automation. Use `scan --format markdown` for a Markdown scan report. `plan` and `diff` accept scan schema `1.0`.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Command completed successfully, or all release checks passed |
+| `1` | Release readiness is blocked or incomplete |
+| `2` | Invalid arguments, target, configuration, or report input or output error |
 
 ## Development
 
