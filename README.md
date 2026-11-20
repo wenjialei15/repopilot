@@ -17,8 +17,16 @@ uv run --no-sync repopilot scan github:octocat/hello-world
 
 The installed package works in Windows paths with non-ASCII characters,
 including on Python 3.11 with a legacy system code page. After editing the
-source, rerun the sync command with `--reinstall-package repopilot` to refresh
+source, rerun the sync command with `--reinstall-package repopilot-health` to refresh
 the installed package.
+
+The distribution name is `repopilot-health` and the command is `repopilot`.
+To try a local v0.1.0 build in an isolated environment:
+
+```sh
+uv build
+uv run --no-project --isolated --with ./dist/repopilot_health-0.1.0-py3-none-any.whl repopilot --version
+```
 
 A plain directory is scanned normally. For a local target, `is_git_repository` indicates whether the target root contains a regular `.git` file or directory. The scanner limits each file to 256 KiB and collects evidence without executing target code. Linked, oversized, and unreadable candidates yield `unknown` when they prevent a decision.
 
@@ -100,4 +108,4 @@ uv run --no-sync python scripts/verify_distribution.py
 uv run --no-sync python scripts/benchmark_scan.py
 ```
 
-See the [Phase 4 verification report](docs/phase-4-verification.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the [Apache 2.0 license](LICENSE).
+See the [release procedure](RELEASING.md), [Phase 4 verification report](docs/phase-4-verification.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the [Apache 2.0 license](LICENSE).

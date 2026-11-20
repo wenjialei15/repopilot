@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 from pydantic import BaseModel
 
+from repopilot import DISTRIBUTION_NAME
 from repopilot.adapters.github import GitHubError, GitHubRepository, github_client
 from repopilot.adapters.local import LocalRepository
 from repopilot.config import ScanConfig, read_config
@@ -98,7 +99,7 @@ def _document(
 
 def _show_version(value: bool) -> None:
     if value:
-        typer.echo(f"RepoPilot {version('repopilot')}")
+        typer.echo(f"RepoPilot {version(DISTRIBUTION_NAME)}")
         raise typer.Exit()
 
 

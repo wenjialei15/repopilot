@@ -20,7 +20,7 @@ Windows uses path and identity checks because Python's descriptor-relative APIs 
 - A public GitHub scan matched the successful `.github/workflows/ci.yml` run for the then-current default branch commit. See the [GitHub workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs).
 - CI retains Windows, Linux, and macOS jobs for Python 3.11 and 3.13 and now checks the 90% coverage threshold and distribution contents.
 - Ruff and mypy passed. The wheel and source archive passed the distribution check, and a clean environment ran the installed wheel against the healthy fixture.
-- Linux and macOS results for this phase remain pending. Release candidate acceptance depends on the new cross-platform CI run.
+- All six Phase 4 CI jobs passed on Windows, Ubuntu, and macOS for Python 3.11 and 3.13 at commit `6589009`. [Phase 4 CI run](https://github.com/wenjialei15/repopilot/actions/runs/44776898235)
 
 ## Performance baseline
 

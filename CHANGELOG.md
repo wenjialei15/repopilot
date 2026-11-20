@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## [0.1.0]
+
+- Use `repopilot-health` as the distribution name and retain the `repopilot` command.
 - Harden local file and directory access, bound remote scans and parser inputs, and match CI results to workflows with recognizable tests.
 - Verify distribution contents and enforce 90% test coverage in CI.
 - Generate maintenance plans, compare scan results, and evaluate release readiness.

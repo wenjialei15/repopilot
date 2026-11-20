@@ -3,6 +3,8 @@ from pathlib import Path, PurePosixPath
 from tarfile import open as open_tar
 from zipfile import ZipFile
 
+from repopilot import DISTRIBUTION_NAME
+
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED = {
     ".git",
@@ -32,7 +34,7 @@ def require_files(names: set[str], required: set[str]) -> None:
 
 
 def verify() -> None:
-    package = f"repopilot-{version('repopilot')}"
+    package = f"{DISTRIBUTION_NAME.replace('-', '_')}-{version(DISTRIBUTION_NAME)}"
     source = ROOT / "src"
     modules = {
         file.relative_to(source).as_posix()

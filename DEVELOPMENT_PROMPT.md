@@ -10,7 +10,7 @@
 
 当前工作区有按原方案搭建的 Phase 1 重建版。原 ChatGPT 对话中的 `RepoPilot-Phase1.zip` 仍待导入。如果原包到位，先对比两份源码和报告格式，保留原版已有行为，再合入已验证的修复。
 
-当前工程已完成 Phase 3。支持本地和公开 GitHub 仓库扫描、15 条可配置规则、加权评分和证据覆盖率。已实现维护计划、扫描对比、发版准备检查和 Markdown 报告。Phase 2 已推送公开仓库 `wenjialei15/repopilot`，首轮远程 CI 已通过。
+当前工程支持本地和公开 GitHub 仓库扫描、15 条可配置规则、加权评分和证据覆盖率。已实现维护计划、扫描对比、发版准备检查和 Markdown 报告。Phase 4 已推送公开仓库 `wenjialei15/repopilot`，六项跨平台 CI 均通过。
 
 ## 全局开发约束
 
@@ -44,13 +44,13 @@
 3. 实现 `release-check`。列出发版通过项、阻断项和未知项。记录退出码和判定依据。
 4. 增加 Markdown 报告、命令示例及回归测试。用现有夹具跑通扫描、生成计划和复扫对比。
 
-## Phase 4 本地交付与待验证项
+## Phase 4 验证结果
 
-已完成读取边界、异常输入、GitHub 失败恢复和 CI 证据判定的加固，并记录 Windows 验证结果与可复现的性能基线。Phase 4 的 Linux 和 macOS 新 CI 结果仍待验证。详见 [Phase 4 验证报告](docs/phase-4-verification.md)。
+已完成读取边界、异常输入、GitHub 失败恢复和 CI 证据判定的加固。Windows、Linux 和 macOS 的 CI 均已通过，已记录可复现的性能基线。详见 [Phase 4 验证报告](docs/phase-4-verification.md)。
 
-## 下一阶段任务：Phase 5
+## Phase 5 发布准备
 
-先确认 Phase 4 的跨平台 CI 结果，再验证发版条件、生成发布说明和执行清单。经明确授权后发布 v0.1.0。
+已准备 `repopilot-health` 0.1.0 本地候选构建、发布说明与发版流程。先验证候选提交自己的跨平台 CI，再按授权范围创建标签或发布。详见 [发布准备报告](docs/release-readiness-0.1.0.md)。
 
 ## 后续路线
 
