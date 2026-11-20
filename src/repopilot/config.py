@@ -5,6 +5,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from repopilot.adapters.paths import MAX_FILE_BYTES
+from repopilot.fileio import read_regular_file
 from repopilot.rules import load_yaml
 
 
@@ -21,12 +22,7 @@ class ScanConfig(BaseModel):
 
 
 def read_config(path: Path) -> ScanConfig:
-    if not path.is_file():
-        raise ValueError("Expected a configuration file.")
-    with path.open("rb") as stream:
-        raw = stream.read(MAX_FILE_BYTES + 1)
-    if len(raw) > MAX_FILE_BYTES:
-        raise ValueError("Configuration file exceeds the size limit.")
+    raw = read_regular_file(path, MAX_FILE_BYTES)
     try:
         return ScanConfig.model_validate(load_yaml(raw.decode("utf-8-sig")))
     except (ValueError, ValidationError, yaml.YAMLError, RecursionError, OverflowError):

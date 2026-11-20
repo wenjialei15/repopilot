@@ -3,7 +3,7 @@ import binascii
 import json
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from typing import cast
 
@@ -16,9 +16,21 @@ MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_ATTEMPTS = 3
 MAX_WAIT_SECONDS = 10
 MAX_REQUESTS = 120
+SCAN_TIMEOUT = 45
 OWNER = re.compile(r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?")
 REPOSITORY = re.compile(r"[a-zA-Z0-9_.-]{1,100}")
 SHA = re.compile(r"[0-9a-f]{40}")
+CONCLUSIONS = {
+    "success",
+    "failure",
+    "neutral",
+    "cancelled",
+    "skipped",
+    "timed_out",
+    "action_required",
+    "stale",
+    "startup_failure",
+}
 
 
 class GitHubError(OSError):
@@ -55,15 +67,16 @@ def _sha(value: object) -> str:
     return value
 
 
-def _read_json(response: httpx.Response) -> object:
+def _read_json(response: httpx.Response, deadline: float) -> object:
     if response.headers.get("content-encoding", "identity").lower() != "identity":
         raise GitHubError("GitHub returned an unsupported response encoding.")
     data = bytearray()
-    deadline = time.monotonic() + 15
-    for chunk in response.iter_bytes(chunk_size=16 * 1024):
+    for chunk in response.iter_bytes():
         if len(data) + len(chunk) > MAX_RESPONSE_BYTES or time.monotonic() > deadline:
             raise GitHubError("GitHub response exceeded the download limit.")
         data.extend(chunk)
+    if time.monotonic() >= deadline:
+        raise GitHubError("GitHub response exceeded the download limit.")
     try:
         return json.loads(data)
     except (ValueError, RecursionError):
@@ -109,7 +122,9 @@ class GitHubRepository:
         self._sleep = sleep
         self._requests = 0
         self._limit_reached = False
+        self._deadline = time.monotonic() + SCAN_TIMEOUT
         self._trees: dict[str, dict[str, TreeEntry]] = {}
+        self._unavailable_trees: set[str] = set()
 
         metadata = _object(self._get(""))
         if metadata.get("private") is not False or metadata.get("visibility") not in (
@@ -133,14 +148,22 @@ class GitHubRepository:
         for attempt in range(MAX_ATTEMPTS):
             if self._limit_reached or self._requests >= MAX_REQUESTS:
                 raise GitHubError("GitHub request budget was exhausted.")
+            now = time.monotonic()
+            remaining = self._deadline - now
+            if remaining <= 0:
+                raise GitHubError("GitHub scan time budget was exhausted.")
             self._requests += 1
             try:
                 with self._client.stream(
-                    "GET", f"{API_URL}{self._endpoint}{suffix}", params=params
+                    "GET",
+                    f"{API_URL}{self._endpoint}{suffix}",
+                    params=params,
+                    follow_redirects=False,
+                    timeout=httpx.Timeout(min(8, remaining), connect=min(5, remaining)),
                 ) as response:
                     status = response.status_code
                     if status == 200:
-                        return _read_json(response)
+                        return _read_json(response, min(self._deadline, now + 15))
                     if status == 404:
                         raise GitHubError(
                             "GitHub resource was not found or is inaccessible."
@@ -177,7 +200,12 @@ class GitHubRepository:
             except (httpx.HTTPError, UnicodeError):
                 raise GitHubError("GitHub response could not be read.") from None
 
-            if attempt == MAX_ATTEMPTS - 1 or delay is None or delay > MAX_WAIT_SECONDS:
+            if (
+                attempt == MAX_ATTEMPTS - 1
+                or delay is None
+                or delay > MAX_WAIT_SECONDS
+                or time.monotonic() + delay >= self._deadline
+            ):
                 if limited:
                     self._limit_reached = True
                     raise GitHubError(
@@ -190,25 +218,35 @@ class GitHubRepository:
         raise AssertionError("Retry limit must be positive.")
 
     def _tree(self, sha: str) -> dict[str, TreeEntry]:
+        if sha in self._unavailable_trees:
+            raise GitHubError("GitHub tree listing is unavailable for this scan.")
         if sha not in self._trees:
-            tree = _object(self._get(f"/git/trees/{sha}"))
-            if tree.get("truncated") is not False:
-                raise GitHubError("GitHub tree listing was incomplete.")
-            entries = {}
-            for value in _array(tree.get("tree")):
-                item = _object(value)
-                name, mode, size = item.get("path"), item.get("mode"), item.get("size")
-                if (
-                    not isinstance(name, str)
-                    or "/" in name
-                    or not isinstance(mode, str)
-                ):
-                    raise GitHubError("GitHub returned an invalid tree entry.")
-                entries[name] = TreeEntry(
-                    mode, _sha(item.get("sha")), size if type(size) is int else None
-                )
-            self._trees[sha] = entries
+            try:
+                self._trees[sha] = self._fetch_tree(sha)
+            except GitHubError:
+                self._unavailable_trees.add(sha)
+                raise
         return self._trees[sha]
+
+    def _fetch_tree(self, sha: str) -> dict[str, TreeEntry]:
+        tree = _object(self._get(f"/git/trees/{sha}"))
+        if tree.get("truncated") is not False:
+            raise GitHubError("GitHub tree listing was incomplete.")
+        entries = {}
+        for value in _array(tree.get("tree")):
+            item = _object(value)
+            name, mode, size = item.get("path"), item.get("mode"), item.get("size")
+            if (
+                not isinstance(name, str)
+                or "/" in name
+                or name in entries
+                or not isinstance(mode, str)
+            ):
+                raise GitHubError("GitHub returned an invalid tree entry.")
+            entries[name] = TreeEntry(
+                mode, _sha(item.get("sha")), size if type(size) is int else None
+            )
+        return entries
 
     def _entry(self, path: str) -> TreeEntry:
         parts = path_parts(path)
@@ -256,7 +294,7 @@ class GitHubRepository:
             raise ValueError("Git blob size did not match its tree entry.")
         return data.decode("utf-8-sig")
 
-    def workflow_runs(self) -> list[str | None]:
+    def workflow_runs(self, paths: Collection[str] | None = None) -> list[str | None]:
         payload = _object(
             self._get(
                 "/actions/runs", {"head_sha": self._commit_sha, "per_page": "100"}
@@ -266,7 +304,8 @@ class GitHubRepository:
         count = payload.get("total_count")
         if not isinstance(count, int) or count != len(runs):
             raise GitHubError("Workflow run listing was incomplete.")
-        latest: dict[int, tuple[int, int, str | None]] = {}
+        latest: dict[int | str, tuple[int, int, str | None]] = {}
+        requested = set(paths) if paths is not None else None
         for value in runs:
             run = _object(value)
             workflow_id, run_number, run_attempt = (
@@ -281,15 +320,32 @@ class GitHubRepository:
                 or run.get("head_sha") != self._commit_sha
             ):
                 raise GitHubError("GitHub returned unexpected workflow run metadata.")
+            key: int | str = workflow_id
+            if requested is not None:
+                raw_path = run.get("path")
+                if not isinstance(raw_path, str):
+                    continue
+                key = raw_path.rsplit("@refs/", 1)[0]
+                if key not in requested:
+                    continue
             conclusion = run.get("conclusion")
             result = (
                 conclusion
-                if (run.get("status") == "completed" and isinstance(conclusion, str))
+                if (
+                    run.get("status") == "completed"
+                    and isinstance(conclusion, str)
+                    and conclusion in CONCLUSIONS
+                )
                 else None
             )
-            previous = latest.get(workflow_id)
+            previous = latest.get(key)
             if previous is None or (run_number, run_attempt) > previous[:2]:
-                latest[workflow_id] = (run_number, run_attempt, result)
+                latest[key] = (run_number, run_attempt, result)
+        if requested is not None:
+            return [
+                latest[path][2] if path in latest else None
+                for path in sorted(requested)
+            ]
         return [item[2] for item in latest.values()]
 
 

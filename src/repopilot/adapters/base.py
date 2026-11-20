@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from typing import Protocol, runtime_checkable
 
 
@@ -18,4 +19,6 @@ class FileListing(Protocol):
 
 @runtime_checkable
 class ExecutionEvidence(Protocol):
-    def workflow_runs(self) -> list[str | None]: ...
+    def workflow_runs(
+        self, paths: Collection[str] | None = None
+    ) -> list[str | None]: ...

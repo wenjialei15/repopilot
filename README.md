@@ -22,7 +22,7 @@ the installed package.
 
 A plain directory is scanned normally. For a local target, `is_git_repository` indicates whether the target root contains a regular `.git` file or directory. The scanner limits each file to 256 KiB and collects evidence without executing target code. Linked, oversized, and unreadable candidates yield `unknown` when they prevent a decision.
 
-Remote scans read the head commit of the public repository's default branch. Set `GITHUB_TOKEN` for authenticated requests. Repository contents come from Git trees and blobs. Workflow run results apply to the scanned commit and are limited to the latest observed run per workflow. If GitHub's retry delay exceeds ten seconds or the API advises a longer wait, RepoPilot leaves affected evidence unavailable. See [GitHub REST API rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
+Remote scans read the head commit of the public repository's default branch. Set `GITHUB_TOKEN` for authenticated requests. Repository contents come from Git trees and blobs. CI run evidence uses the latest observed runs for workflows with recognizable test commands. RepoPilot budgets 45 seconds and 120 requests for a remote scan and waits at most ten seconds per retry. When GitHub requires a longer wait, affected evidence is unavailable. See [GitHub REST API rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
 
 A successful scan exits with code 0 even when a finding fails. Output goes to stdout unless you pass `--output`. Errors go to stderr.
 
@@ -92,10 +92,12 @@ These three commands default to Markdown and accept `--format json` for automati
 ## Development
 
 ```sh
-uv run --no-sync pytest --cov=repopilot
+uv run --no-sync pytest --cov=repopilot --cov-fail-under=90
 uv run --no-sync ruff check .
-uv run --no-sync mypy src
+uv run --no-sync mypy src scripts
 uv build
+uv run --no-sync python scripts/verify_distribution.py
+uv run --no-sync python scripts/benchmark_scan.py
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Apache 2.0 license](LICENSE).
+See the [Phase 4 verification report](docs/phase-4-verification.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the [Apache 2.0 license](LICENSE).

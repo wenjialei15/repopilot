@@ -5,6 +5,7 @@ import pytest
 import respx
 from typer.testing import CliRunner
 
+from repopilot.adapters import github
 from repopilot.adapters.github import (
     API_URL,
     MAX_RESPONSE_BYTES,
@@ -53,6 +54,7 @@ def trees(mock: respx.MockRouter) -> None:
 def run(conclusion: str | None, run_number: int) -> dict[str, object]:
     return {
         "workflow_id": 12,
+        "path": ".github/workflows/ci.yml@refs/heads/stable/v1",
         "run_number": run_number,
         "run_attempt": 1,
         "head_sha": HEAD,
@@ -148,3 +150,102 @@ def test_private_repo_stops_before_reading_content() -> None:
         mock.get(BASE).respond(json={"private": True, "default_branch": "main"})
         with pytest.raises(GitHubError, match="Only public"):
             GitHubRepository(client, "acme/example")
+
+
+def test_unrelated_workflow_cannot_satisfy_ci() -> None:
+    with respx.mock as mock:
+        trees(mock)
+        unrelated = {**run("success", 1), "path": ".github/workflows/docs.yml"}
+        mock.get(f"{BASE}/actions/runs").respond(
+            json={"total_count": 1, "workflow_runs": [unrelated]}
+        )
+        result = CliRunner().invoke(app, ["scan", "github:acme/example"])
+    assert result.exit_code == 0, result.output
+    report = ScanReport.model_validate_json(result.stdout)
+    assert next(item for item in report.findings if item.rule_id == "CI003").status == (
+        "unknown"
+    )
+
+
+def test_retry_respects_the_scan_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(github, "SCAN_TIMEOUT", 1)
+    waits: list[float] = []
+    with respx.mock as mock, github_client(None) as client:
+        route = mock.get(BASE).respond(429, headers={"Retry-After": "3"})
+        with pytest.raises(GitHubError, match="rate limit"):
+            GitHubRepository(client, "acme/example", sleep=waits.append)
+    assert route.call_count == 1
+    assert not waits
+
+
+def test_failed_tree_is_not_retried_by_each_rule() -> None:
+    with respx.mock(assert_all_called=False) as mock, github_client(None) as client:
+        trees(mock)
+        route = mock.get(f"{BASE}/git/trees/{ROOT}").respond(503)
+        repo = GitHubRepository(client, "acme/example", sleep=lambda _: None)
+        for filename in ("README.md", "LICENSE"):
+            with pytest.raises(GitHubError):
+                repo.read_text(filename)
+    assert route.call_count == 3
+
+
+def test_adapter_refuses_redirect_with_caller_supplied_client() -> None:
+    def redirect(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "api.github.com"
+        return httpx.Response(302, headers={"Location": "https://example.invalid/"})
+
+    with (
+        httpx.Client(
+            transport=httpx.MockTransport(redirect), follow_redirects=True
+        ) as client,
+        pytest.raises(GitHubError, match="HTTP 302"),
+    ):
+        GitHubRepository(client, "acme/example")
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"truncated": True, "tree": []}, "incomplete"),
+        ({"truncated": False, "tree": [tree("same", WF)] * 2}, "invalid tree entry"),
+        ({"truncated": False, "tree": [{"path": "README.md"}]}, "invalid tree entry"),
+    ],
+)
+def test_invalid_tree_is_unavailable(payload: object, message: str) -> None:
+    with respx.mock(assert_all_called=False) as mock, github_client(None) as client:
+        trees(mock)
+        mock.get(f"{BASE}/git/trees/{ROOT}").respond(json=payload)
+        repo = GitHubRepository(client, "acme/example")
+        with pytest.raises(GitHubError, match=message):
+            repo.read_text("README.md")
+
+
+@pytest.mark.parametrize(
+    ("content", "encoding", "message"),
+    [
+        ("!", "base64", "encoding was invalid"),
+        ("YQ==", "base64", "size did not match"),
+        ("README", "raw", "Expected a base64"),
+    ],
+)
+def test_invalid_blob_is_rejected(content: str, encoding: str, message: str) -> None:
+    with respx.mock(assert_all_called=False) as mock, github_client(None) as client:
+        trees(mock)
+        mock.get(f"{BASE}/git/blobs/{DOC}").respond(
+            json={"encoding": encoding, "content": content}
+        )
+        repo = GitHubRepository(client, "acme/example")
+        with pytest.raises(ValueError, match=message):
+            repo.read_text("README.md")
+
+
+def test_invalid_token_and_target_return_cli_errors() -> None:
+    runner = CliRunner()
+    for target, token, expected in (
+        ("github:acme/..", "example-token", "owner/repo"),
+        ("github:acme/example", "invalid token", "invalid characters"),
+    ):
+        result = runner.invoke(app, ["scan", target], env={"GITHUB_TOKEN": token})
+        assert result.exit_code == 2
+        assert expected in result.stderr
+        assert token not in result.output

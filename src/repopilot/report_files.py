@@ -4,20 +4,31 @@ from tempfile import NamedTemporaryFile
 
 from pydantic import ValidationError
 
+from repopilot.fileio import read_regular_file
 from repopilot.models import ScanReport
 
 MAX_REPORT_BYTES = 4 * 1024 * 1024
 
 
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON object key.")
+        result[key] = value
+    return result
+
+
+def _reject_constant(value: str) -> object:
+    raise ValueError("Expected a finite JSON value.")
+
+
 def read_report(path: Path) -> ScanReport:
-    if not path.is_file():
-        raise ValueError("Expected a scan report file.")
-    with path.open("rb") as stream:
-        data = stream.read(MAX_REPORT_BYTES + 1)
-    if len(data) > MAX_REPORT_BYTES:
-        raise ValueError("Scan report exceeds the size limit.")
+    data = read_regular_file(path, MAX_REPORT_BYTES)
     try:
-        payload = json.loads(data)
+        payload = json.loads(
+            data, object_pairs_hook=_unique_keys, parse_constant=_reject_constant
+        )
     except (ValueError, RecursionError):
         raise ValueError("Scan report is not valid JSON.") from None
     if not isinstance(payload, dict) or "schema_version" not in payload:
@@ -30,8 +41,8 @@ def read_report(path: Path) -> ScanReport:
     ):
         raise ValueError("Scan report is missing required fields.")
     try:
-        return ScanReport.model_validate(payload)
-    except (ValidationError, RecursionError):
+        return ScanReport.model_validate_json(json.dumps(payload, allow_nan=False))
+    except (ValueError, ValidationError, RecursionError):
         raise ValueError("Scan report does not match schema 1.0.") from None
 
 

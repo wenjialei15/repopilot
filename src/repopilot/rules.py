@@ -4,8 +4,14 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol, cast
 
 import yaml
+from yaml.events import (
+    AliasEvent,
+    MappingEndEvent,
+    MappingStartEvent,
+    SequenceEndEvent,
+    SequenceStartEvent,
+)
 from yaml.nodes import MappingNode, Node
-from yaml.tokens import AliasToken
 
 from repopilot.adapters.base import ExecutionEvidence, FileListing, RepositoryAdapter
 from repopilot.models import Evidence, Finding, Severity, Status
@@ -53,9 +59,16 @@ WorkflowLoader.add_implicit_resolver(
 
 
 def load_yaml(text: str) -> object:
-    # Alias expansion is unnecessary for these checks. Treat it as unavailable.
-    if any(isinstance(token, AliasToken) for token in yaml.scan(text)):
-        raise ValueError("YAML aliases are unsupported.")
+    depth = 0
+    for count, event in enumerate(yaml.parse(text, Loader=WorkflowLoader), start=1):
+        if isinstance(event, AliasEvent):
+            raise ValueError("YAML aliases are unsupported.")
+        if isinstance(event, (MappingStartEvent, SequenceStartEvent)):
+            depth += 1
+        elif isinstance(event, (MappingEndEvent, SequenceEndEvent)):
+            depth -= 1
+        if count > 12_000 or depth > 64:
+            raise ValueError("YAML exceeds the structural limits.")
     return yaml.load(text, Loader=WorkflowLoader)
 
 
@@ -215,7 +228,7 @@ def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
 
 
 _TEST_COMMAND = re.compile(
-    r"^\s*(?:(?:uv run|poetry run|python3? -m)\s+)?"
+    r"^\s*(?:(?:uv run(?:\s+--(?:no-sync|locked|frozen))*|poetry run|python3? -m)\s+)?"
     r"(?:pytest|npm test|npm run test|pnpm test|yarn test|go test|cargo test|"
     r"dotnet test|mvn test|make test|ctest|unittest)(?:\s|$)"
 )
@@ -269,7 +282,21 @@ def _ci_runs(context: RuleContext) -> RuleResult:
             return "skip", "No workflow files apply.", []
         if not isinstance(context.repository, ExecutionEvidence):
             return "unknown", "Workflow runs are unavailable in a local scan.", []
-        runs = context.repository.workflow_runs()
+        workflows, unreadable = context.workflows()
+        evidence = list(unreadable)
+        test_paths = []
+        for path, workflow in workflows.items():
+            try:
+                if _test_steps(workflow):
+                    test_paths.append(path)
+            except ValueError:
+                evidence.append(
+                    Evidence(path=path, detail="Test steps could not be read.")
+                )
+        if not test_paths:
+            return "unknown", "No test workflow could be matched to a run.", evidence
+        test_paths.sort()
+        runs = context.repository.workflow_runs(test_paths)
     except (OSError, ValueError):
         return "unknown", "GitHub workflow runs could not be verified.", []
     failures = {
@@ -279,18 +306,16 @@ def _ci_runs(context: RuleContext) -> RuleResult:
         "action_required",
         "startup_failure",
     }
-    evidence = (
-        [
-            Evidence(
-                path=".github/workflows", detail=f"{len(runs)} latest runs observed."
-            )
-        ]
-        if runs
-        else []
+    if len(runs) != len(test_paths):
+        return "unknown", "Workflow run evidence is incomplete.", evidence
+    complete = not evidence
+    evidence.extend(
+        Evidence(path=path, detail=f"Latest run: {conclusion or 'unverified'}.")
+        for path, conclusion in zip(test_paths, runs, strict=True)
     )
     if any(conclusion in failures for conclusion in runs):
         return "fail", "A latest workflow run did not succeed.", evidence
-    if runs and all(conclusion == "success" for conclusion in runs):
+    if complete and all(conclusion == "success" for conclusion in runs):
         return "pass", "Latest observed workflow runs succeeded.", evidence
     return "unknown", "No conclusive workflow run evidence was found.", evidence
 

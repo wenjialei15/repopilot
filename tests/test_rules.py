@@ -16,7 +16,7 @@ jobs:
   test:
     steps:
       - uses: actions/checkout@0123456789abcdef0123456789abcdef01234567
-      - run: uv run pytest
+      - run: uv run --no-sync pytest
 """
 
 FILE_RULES = [
@@ -60,7 +60,7 @@ def test_file_rule(tmp_path: Path, rule_id: str, name: str) -> None:
         ("SEC001", "read-all", "write-all", "fail"),
         ("SEC002", "0123456789abcdef0123456789abcdef01234567", "v4", "fail"),
         ("SEC003", "pull_request]", "pull_request_target]", "fail"),
-        ("CI002", "uv run pytest", "echo pytest", "fail"),
+        ("CI002", "uv run --no-sync pytest", "echo pytest", "fail"),
     ],
 )
 def test_workflow_rule(
